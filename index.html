@@ -99,13 +99,13 @@ canvas#ambient{display:block;width:100%;height:100%;position:absolute;top:0;left
 .go-stat-label{font-size:9px;color:var(--text3);font-family:'Space Mono',monospace}
 .go-stat-val{font-size:19px;font-weight:700;color:#fff}
 .go-stat-val.highlight{color:var(--accent2)}
-#go-restart{margin-top:6px;padding:12px 30px;border-radius:50px;background:var(--accent);color:#fff;border:none;font-size:14px;font-weight:700;font-family:'Syne',sans-serif;cursor:pointer;letter-spacing:.05em;transition:transform .1s;animation:goIn .4s .2s ease both}
+#go-restart{margin-top:6px;padding:16px 36px;border-radius:50px;background:var(--accent);color:#fff;border:none;font-size:16px;font-weight:700;font-family:'Syne',sans-serif;cursor:pointer;letter-spacing:.05em;transition:transform .1s;animation:goIn .4s .2s ease both;min-width:200px;touch-action:manipulation}
 #go-restart:active{transform:scale(.95)}
 @keyframes goIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
 
 #win-overlay{display:none;position:absolute;inset:0;background:rgba(8,8,14,.93);border-radius:14px;flex-direction:column;align-items:center;justify-content:center;gap:10px;z-index:50;backdrop-filter:blur(6px)}
 #win-overlay.show{display:flex}
-#win-restart{margin-top:8px;padding:12px 30px;border-radius:50px;background:var(--accent2);color:#111;border:none;font-size:14px;font-weight:700;font-family:'Syne',sans-serif;cursor:pointer;letter-spacing:.05em;transition:transform .1s;animation:goIn .5s .3s ease both}
+#win-restart{margin-top:8px;padding:16px 36px;border-radius:50px;background:var(--accent2);color:#111;border:none;font-size:16px;font-weight:700;font-family:'Syne',sans-serif;cursor:pointer;letter-spacing:.05em;transition:transform .1s;animation:goIn .5s .3s ease both;min-width:200px;touch-action:manipulation}
 #win-restart:active{transform:scale(.95)}
 #win-icon{font-size:54px;animation:winSpin 1s ease both}
 @keyframes winSpin{from{transform:scale(0) rotate(-180deg)}to{transform:scale(1) rotate(0)}}
@@ -560,11 +560,20 @@ arenaWrap.addEventListener('mousemove',e=>{
   if(!dropping)startTrail(dropX,LEVELS[nextLvl].r,LEVELS[nextLvl].color);
 });
 arenaWrap.addEventListener('click',e=>{if(!dead){dropX=getX(e);drop()}});
-arenaWrap.addEventListener('touchmove',e=>{e.preventDefault();if(dead)return;dropX=getX(e);document.getElementById('drop-guide').style.left=dropX+'px';},{passive:false});
-arenaWrap.addEventListener('touchend',e=>{e.preventDefault();if(!dead)drop();},{passive:false});
+arenaWrap.addEventListener('touchmove',e=>{
+  if(e.target.tagName==='BUTTON')return;
+  e.preventDefault();if(dead)return;
+  dropX=getX(e);document.getElementById('drop-guide').style.left=dropX+'px';
+},{passive:false});
+arenaWrap.addEventListener('touchend',e=>{
+  if(e.target.tagName==='BUTTON')return;
+  e.preventDefault();if(!dead)drop();
+},{passive:false});
 arenaWrap.addEventListener('mouseleave',stopTrail);
 document.getElementById('go-restart').addEventListener('click',init);
 document.getElementById('win-restart').addEventListener('click',init);
+document.getElementById('go-restart').addEventListener('touchend',e=>{e.stopPropagation();e.preventDefault();init();},{passive:false});
+document.getElementById('win-restart').addEventListener('touchend',e=>{e.stopPropagation();e.preventDefault();init();},{passive:false});
 window.addEventListener('load',()=>setTimeout(init,60));
 window.addEventListener('resize',resize);
 </script>
