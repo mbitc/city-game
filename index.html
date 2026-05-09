@@ -105,6 +105,8 @@ canvas#ambient{display:block;width:100%;height:100%;position:absolute;top:0;left
 
 #win-overlay{display:none;position:absolute;inset:0;background:rgba(8,8,14,.93);border-radius:14px;flex-direction:column;align-items:center;justify-content:center;gap:10px;z-index:50;backdrop-filter:blur(6px)}
 #win-overlay.show{display:flex}
+#win-restart{margin-top:8px;padding:12px 30px;border-radius:50px;background:var(--accent2);color:#111;border:none;font-size:14px;font-weight:700;font-family:'Syne',sans-serif;cursor:pointer;letter-spacing:.05em;transition:transform .1s;animation:goIn .5s .3s ease both}
+#win-restart:active{transform:scale(.95)}
 #win-icon{font-size:54px;animation:winSpin 1s ease both}
 @keyframes winSpin{from{transform:scale(0) rotate(-180deg)}to{transform:scale(1) rotate(0)}}
 #win-title{font-size:21px;font-weight:800;color:var(--accent2);text-align:center}
@@ -174,6 +176,7 @@ canvas#ambient{display:block;width:100%;height:100%;position:absolute;top:0;left
         <div id="win-icon">🏛</div>
         <div id="win-title">ROTUŠĖ PASTATYTA!</div>
         <div id="win-sub">Klaipėda džiaugiasi tavo talentu!</div>
+        <button id="win-restart">ŽAISTI IŠ NAUJO</button>
       </div>
     </div>
   </div>
@@ -446,7 +449,11 @@ function tryMerge(){
 }
 
 function showWin(){
+  dead=true;
+  if(animReq)cancelAnimationFrame(animReq);
   const ov=document.getElementById('win-overlay');ov.classList.add('show');
+  // clear old confetti
+  ov.querySelectorAll('.confetti').forEach(c=>c.remove());
   for(let i=0;i<24;i++){
     const c=document.createElement('div');c.className='confetti';
     c.style.cssText=`left:${10+Math.random()*80}%;background:hsl(${Math.random()*360},80%,60%);--cd:${1.2+Math.random()*1.5}s;--delay:${Math.random()*.6}s;--cx:${(Math.random()-.5)*70}px`;
@@ -557,6 +564,7 @@ arenaWrap.addEventListener('touchmove',e=>{e.preventDefault();if(dead)return;dro
 arenaWrap.addEventListener('touchend',e=>{e.preventDefault();if(!dead)drop();},{passive:false});
 arenaWrap.addEventListener('mouseleave',stopTrail);
 document.getElementById('go-restart').addEventListener('click',init);
+document.getElementById('win-restart').addEventListener('click',init);
 window.addEventListener('load',()=>setTimeout(init,60));
 window.addEventListener('resize',resize);
 </script>
