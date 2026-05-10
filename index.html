@@ -138,12 +138,16 @@ canvas#ambient{display:block;width:100%;height:100%;position:absolute;top:0;left
   <div id="ticker-wrap">
     <div id="ticker-inner">
       <span>🏆 Rekordas — <b id="ticker-best">—</b></span>
-      <span>🔥 Nerijonas aplenkė Pempininkus!</span>
-      <span>☕ Kavinė → Viešbutis Turgaus g.</span>
+      <span id="wx-temp">🌡️ Kraunama...</span>
+      <span id="wx-wind">💨 —</span>
+      <span id="wx-wave">🌊 —</span>
+      <span id="wx-sky">☁️ —</span>
       <span>🏛 Rotušė pastatyta Danės rajone!</span>
       <span>🏆 Rekordas — <b id="ticker-best2">—</b></span>
-      <span>🔥 Nerijonas aplenkė Pempininkus!</span>
-      <span>☕ Kavinė → Viešbutis Turgaus g.</span>
+      <span id="wx-temp2">🌡️ —</span>
+      <span id="wx-wind2">💨 —</span>
+      <span id="wx-wave2">🌊 —</span>
+      <span id="wx-sky2">☁️ —</span>
       <span>🏛 Rotušė pastatyta Danės rajone!</span>
     </div>
   </div>
@@ -189,6 +193,123 @@ canvas#ambient{display:block;width:100%;height:100%;position:absolute;top:0;left
 <script>
 function setVH(){document.documentElement.style.setProperty('--vh',`${window.innerHeight*.01}px`)}
 setVH();window.addEventListener('resize',setVH);window.addEventListener('orientationchange',()=>setTimeout(setVH,120));
+
+// ===== SOUND ENGINE =====
+let audioCtx=null;
+async function getAudio(){
+  if(!audioCtx)audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+  if(audioCtx.state==='suspended')await audioCtx.resume();
+  return audioCtx;
+}
+
+async function playTone({freq=440,freq2,type='sine',gain=0.18,attack=0.005,decay=0.08,release=0.15,duration=0.25,delay=0}={}){
+  try{
+    const ac=await getAudio();
+    const t=ac.currentTime+delay+0.01;
+    const osc=ac.createOscillator();
+    const env=ac.createGain();
+    osc.connect(env);
+    env.connect(ac.destination);
+    osc.type=type;
+    osc.frequency.setValueAtTime(freq,t);
+    if(freq2)osc.frequency.exponentialRampToValueAtTime(freq2,t+duration);
+    env.gain.setValueAtTime(0.0001,t);
+    env.gain.linearRampToValueAtTime(gain,t+attack);
+    env.gain.linearRampToValueAtTime(gain*0.3,t+attack+decay);
+    env.gain.linearRampToValueAtTime(0.0001,t+duration);
+    osc.start(t);
+    osc.stop(t+duration+release);
+  }catch(e){console.warn('snd err',e)}
+}
+
+async function playNoise({gain=0.05,duration=0.08,freq=800,delay=0}={}){
+  try{
+    const ac=await getAudio();
+    const t=ac.currentTime+delay+0.01;
+    const buf=ac.createBuffer(1,Math.ceil(ac.sampleRate*duration),ac.sampleRate);
+    const d=buf.getChannelData(0);for(let i=0;i<d.length;i++)d[i]=Math.random()*2-1;
+    const src=ac.createBufferSource();src.buffer=buf;
+    const filt=ac.createBiquadFilter();filt.type='bandpass';filt.frequency.value=freq;filt.Q.value=2;
+    const env=ac.createGain();
+    src.connect(filt);filt.connect(env);env.connect(ac.destination);
+    env.gain.setValueAtTime(gain,t);
+    env.gain.exponentialRampToValueAtTime(0.0001,t+duration);
+    src.start(t);src.stop(t+duration+0.02);
+  }catch(e){console.warn('noise err',e)}
+}
+
+const MERGE_FREQS=[
+  [330,440],[400,550],[480,640],[560,750],[650,870],[750,1000],[880,1200]
+];
+
+function sndRoll(lvl){
+  // minkštas burbulėlis — kaip kamuolys rieda
+  const freq=180+lvl*20+Math.random()*40;
+  playTone({freq,freq2:freq*0.75,type:'sine',gain:0.04,attack:0.01,decay:0.05,release:0.08,duration:0.08});
+}
+
+function sndBallHit(impact,lvlA,lvlB){
+  const vol=Math.min(0.1, impact*0.018);
+  const avgLvl=(lvlA+lvlB)/2;
+  const freq=200+avgLvl*25;
+  // minkštas "tok" garsas
+  playTone({freq,freq2:freq*0.5,type:'sine',gain:vol,attack:0.001,decay:0.03,release:0.04,duration:0.04});
+  if(impact>3)playNoise({gain:vol*0.4,duration:0.03,freq:300+avgLvl*40});
+}
+
+function sndBounce(speed,lvl){
+  const vol=Math.min(0.12, speed*0.012);
+  const freq=120+lvl*30+(speed*8);
+  playTone({freq,freq2:freq*0.6,type:'sine',gain:vol,attack:0.002,decay:0.04,release:0.06,duration:0.06});
+}
+
+function sndDrop(){
+  playTone({freq:280,freq2:180,type:'sine',gain:.12,attack:.004,decay:.06,release:.12,duration:.1});
+  playNoise({gain:.04,duration:.06,freq:600});
+}
+
+function sndMerge(lvl,combo){
+  const [f1,f2]=MERGE_FREQS[Math.min(lvl,MERGE_FREQS.length-1)];
+  const g=Math.min(.22,.14+combo*.02);
+  // base note
+  playTone({freq:f1,freq2:f2,type:'triangle',gain:g,attack:.003,decay:.05,release:.18,duration:.22});
+  // harmony
+  playTone({freq:f1*1.25,freq2:f2*1.25,type:'sine',gain:g*.5,attack:.008,decay:.04,release:.15,duration:.18,delay:.015});
+  // shimmer for high levels
+  if(lvl>=3)playTone({freq:f2*2,type:'sine',gain:.06,attack:.01,decay:.03,release:.12,duration:.15,delay:.03});
+  // combo punch
+  if(combo>=2)playNoise({gain:.06+combo*.01,duration:.05,freq:400+lvl*80});
+}
+
+function sndCombo(combo){
+  const baseFreq=400+combo*80;
+  for(let i=0;i<Math.min(combo,4);i++){
+    playTone({freq:baseFreq*(1+i*.15),type:'square',gain:.07,attack:.003,decay:.04,release:.1,duration:.1,delay:i*.07});
+  }
+}
+
+function sndRecord(){
+  // rising arpeggio
+  [523,659,784,1047].forEach((f,i)=>{
+    playTone({freq:f,type:'triangle',gain:.13,attack:.005,decay:.05,release:.15,duration:.18,delay:i*.09});
+  });
+}
+
+function sndWin(){
+  // triumphant chord sequence
+  const chord1=[523,659,784];
+  const chord2=[587,740,880,1047];
+  chord1.forEach((f,i)=>playTone({freq:f,type:'triangle',gain:.15,attack:.01,decay:.1,release:.3,duration:.5,delay:i*.02}));
+  chord2.forEach((f,i)=>playTone({freq:f,type:'triangle',gain:.18,attack:.01,decay:.12,release:.4,duration:.7,delay:.35+i*.02}));
+  playTone({freq:1047,freq2:1568,type:'sine',gain:.1,attack:.02,decay:.2,release:.5,duration:.8,delay:.7});
+}
+
+function sndGameOver(){
+  [440,392,349,294].forEach((f,i)=>{
+    playTone({freq:f,type:'triangle',gain:.12,attack:.01,decay:.08,release:.2,duration:.25,delay:i*.13});
+  });
+}
+// ===== END SOUND ENGINE =====
 
 const LEVELS=[
   {name:'Namelis',   emoji:'🏠',r:15,color:'#ff5555',glow:'#ff3333',pts:10},
@@ -252,6 +373,8 @@ function init(){
   document.getElementById('best-val').textContent=best>0?best:'—';
   document.getElementById('combo-val').classList.remove('show');
   if(animReq)cancelAnimationFrame(animReq);
+  // test audio atblokiravimas
+  playTone({freq:440,type:'sine',gain:0.08,attack:0.01,decay:0.05,release:0.1,duration:0.15});
   loop();
 }
 
@@ -307,6 +430,7 @@ function setScore(v){
   if(v>best){
     best=v;
     try{localStorage.setItem('cg4_best',best)}catch(e){}
+    sndRecord();
     document.getElementById('best-val').textContent=best;
     const tb=document.getElementById('ticker-best');if(tb)tb.textContent=best+' pt';
     const tb2=document.getElementById('ticker-best2');if(tb2)tb2.textContent=best+' pt';
@@ -409,6 +533,7 @@ function registerMerge(){
 
 function drop(){
   if(dropping||dead)return;dropping=true;stopTrail();
+  sndDrop();
   const lvl=nextLvl,r=LEVELS[lvl].r;
   balls.push({x:dropX,y:r+2,vx:0,vy:1.5,lvl,r,merged:false,age:0,scaleAnim:0,glowPulse:0});
   nextLvl=randDropLvl();updatePreview();
@@ -431,6 +556,8 @@ function tryMerge(){
           const combo=registerMerge();
           const pts=L.pts*combo;
           setScore(score+pts);mergeCount++;
+          sndMerge(newLvl,combo);
+          if(combo>=2)sndCombo(combo);
           spawnMergeFlash(mx,my,L.color,L.r*.8);
           spawnRipples(mx,my,L.color,L.r);
           spawnSparks(mx,my,L.color,8+combo*3);
@@ -456,6 +583,7 @@ function tryMerge(){
 function showWin(){
   dead=true;
   if(animReq)cancelAnimationFrame(animReq);
+  sndWin();
   const ov=document.getElementById('win-overlay');ov.classList.add('show');
   // clear old confetti
   ov.querySelectorAll('.confetti').forEach(c=>c.remove());
@@ -513,9 +641,19 @@ function physicsStep(){
     for(const b of balls){
       b.vy+=GRAVITY/SUBSTEPS;b.vx*=FRICTION;
       b.x+=b.vx/SUBSTEPS;b.y+=b.vy/SUBSTEPS;
-      if(b.x-b.r<0){b.x=b.r;b.vx=Math.abs(b.vx)*DAMPING}
-      if(b.x+b.r>W){b.x=W-b.r;b.vx=-Math.abs(b.vx)*DAMPING}
-      if(b.y+b.r>H){b.y=H-b.r;b.vy=-Math.abs(b.vy)*DAMPING;b.vx*=.82}
+      if(b.x-b.r<0){b.x=b.r;const spd=Math.abs(b.vx);b.vx=spd*DAMPING;if(spd>1.5)sndBounce(spd,b.lvl)}
+      if(b.x+b.r>W){b.x=W-b.r;const spd=Math.abs(b.vx);b.vx=-spd*DAMPING;if(spd>1.5)sndBounce(spd,b.lvl)}
+      if(b.y+b.r>H){
+        b.y=H-b.r;const spd=Math.abs(b.vy);b.vy=-spd*DAMPING;b.vx*=.82;
+        if(spd>2)sndBounce(spd,b.lvl);
+        // sliding/rolling garsas kai lėtai juda ant grindų
+        else if(spd>0.3&&Math.abs(b.vx)>0.5){
+          if(!b._lastRoll||Date.now()-b._lastRoll>180){
+            b._lastRoll=Date.now();
+            sndRoll(b.lvl);
+          }
+        }
+      }
       b.age++;
     }
     for(let i=0;i<balls.length;i++){
@@ -527,7 +665,12 @@ function physicsStep(){
           const ov=(minD-dist)/2,nx=dx/dist,ny=dy/dist;
           a.x-=nx*ov;a.y-=ny*ov;b.x+=nx*ov;b.y+=ny*ov;
           const dvx=b.vx-a.vx,dvy=b.vy-a.vy,dot=dvx*nx+dvy*ny;
-          if(dot<0){const imp=dot*.52;a.vx+=imp*nx;a.vy+=imp*ny;b.vx-=imp*nx;b.vy-=imp*ny}
+          if(dot<0){
+            const imp=dot*.52;
+            a.vx+=imp*nx;a.vy+=imp*ny;b.vx-=imp*nx;b.vy-=imp*ny;
+            const impact=Math.abs(dot);
+            if(impact>1.2)sndBallHit(impact,a.lvl,b.lvl);
+          }
         }
       }
     }
@@ -541,6 +684,7 @@ function checkDead(){
   if(danger)dangerFrames++;else dangerFrames=0;
   if(dangerFrames>95){
     dead=true;
+    sndGameOver();
     document.getElementById('go-score').textContent=score;
     document.getElementById('go-best').textContent=best;
     document.getElementById('go-merges').textContent=mergeCount;
@@ -579,7 +723,92 @@ document.getElementById('go-restart').addEventListener('click',init);
 document.getElementById('win-restart').addEventListener('click',init);
 document.getElementById('go-restart').addEventListener('touchend',e=>{e.stopPropagation();e.preventDefault();init();},{passive:false});
 document.getElementById('win-restart').addEventListener('touchend',e=>{e.stopPropagation();e.preventDefault();init();},{passive:false});
-window.addEventListener('load',()=>setTimeout(init,60));
+// Unlock audio on first touch/click (mobile requirement)
+function unlockAudio(){
+  if(!audioCtx){
+    audioCtx=new(window.AudioContext||window.webkitAudioContext)();
+  }
+  if(audioCtx.state==='suspended')audioCtx.resume();
+  // play a silent buffer to fully unlock on iOS
+  try{
+    const buf=audioCtx.createBuffer(1,1,22050);
+    const src=audioCtx.createBufferSource();
+    src.buffer=buf;src.connect(audioCtx.destination);
+    src.start(0);
+  }catch(e){}
+  document.removeEventListener('touchstart',unlockAudio);
+  document.removeEventListener('click',unlockAudio);
+}
+document.addEventListener('touchstart',unlockAudio,{passive:true});
+document.addEventListener('click',unlockAudio,{once:true});
+// ===== KLAIPĖDOS ORAI =====
+const WIND_DIRS=['Š','ŠR','R','PR','P','PV','V','ŠV'];
+function windDir(deg){return WIND_DIRS[Math.round(deg/45)%8]}
+
+function setWeather(temp,wind,dir,sky,extra){
+  const tempSign=temp>0?'+':'';
+  const slots=[
+    ['wx-temp','wx-temp2', `🌡️ Klaipėda ${tempSign}${temp}°C`],
+    ['wx-wind','wx-wind2', `💨 ${dir} vėjas ${wind} m/s`],
+    ['wx-wave','wx-wave2', extra],
+    ['wx-sky', 'wx-sky2',  `🌤️ ${sky}`],
+  ];
+  slots.forEach(([id1,id2,txt])=>{
+    [id1,id2].forEach(id=>{const e=document.getElementById(id);if(e)e.textContent=txt});
+  });
+}
+
+async function fetchWeather(){
+  // open-meteo leidžia CORS iš visų domenų
+  try{
+    const url='https://api.open-meteo.com/v1/forecast'
+      +'?latitude=55.7063&longitude=21.1237'
+      +'&current=temperature_2m,weathercode,windspeed_10m,winddirection_10m,relativehumidity_2m'
+      +'&wind_speed_unit=ms&timezone=Europe%2FVilnius&forecast_days=1';
+    const r=await fetch(url);if(!r.ok)throw new Error(r.status);
+    const d=await r.json();
+    const c=d.current;
+    const WMO={0:'Giedra',1:'Beveik giedra',2:'Iš dalies debesuota',3:'Debesuota',
+      45:'Rūkas',51:'Dulksna',61:'Lengvas lietus',63:'Lietus',65:'Stiprus lietus',
+      71:'Sniegas',80:'Lietus',95:'Perkūnija'};
+    const sky=WMO[c.weathercode]||`Kodas ${c.weathercode}`;
+    setWeather(
+      Math.round(c.temperature_2m),
+      Math.round(c.windspeed_10m),
+      windDir(c.winddirection_10m),
+      sky,
+      `💧 Drėgmė ${c.relativehumidity_2m}%`
+    );
+    return;
+  }catch(e){/* lokalus file:// */}
+
+  try{
+    const url='https://corsproxy.io/?'+encodeURIComponent('https://wttr.in/Klaipeda?format=j1');
+    const r=await fetch(url);if(!r.ok)throw new Error(r.status);
+    const d=await r.json();
+    const c=d.current_condition[0];
+    const temp=Math.round(parseFloat(c.temp_C));
+    const wind=Math.round(parseFloat(c.windspeedKmph)/3.6);
+    setWeather(temp,wind,windDir(parseFloat(c.winddirDegree)),
+      c.weatherDesc?.[0]?.value||'—',`💧 Drėgmė ${c.humidity}%`);
+    return;
+  }catch(e){/* fallback */}
+
+  // jei visi fail — rodome mock duomenis (lokalus testavimas)
+  const mockTemp=Math.round(8+Math.random()*12);
+  const mockWind=Math.round(3+Math.random()*10);
+  const mockDirs=['Š','V','PV','P'];
+  const mockSkies=['Debesuota','Iš dalies debesuota','Lietus','Giedra'];
+  setWeather(
+    mockTemp, mockWind,
+    mockDirs[Math.floor(Math.random()*mockDirs.length)],
+    mockSkies[Math.floor(Math.random()*mockSkies.length)],
+    `🌊 Baltijos jūra`
+  );
+}
+// ===== END WEATHER =====
+
+window.addEventListener('load',()=>{setTimeout(init,60);fetchWeather();});
 window.addEventListener('resize',resize);
 </script>
 </body>
